@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TensorFlow Veggie Cooking Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+  <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+    <h1 class="text-2xl font-bold text-center mb-4">TensorFlow Veggie Cooking Chat <img src="banner.png"/></h1>
+    <div class="mb-4">
+      <p class="text-sm text-gray-600">Recommended prompts: <br>
+        - "How do I steam broccoli?"<br>
+        - "What's the best way to roast carrots?"<br>
+        - "How can I sauté zucchini?"<br>
+        - "Can I boil carrots?"<br>
+        Try asking about cooking broccoli, carrots, or zucchini!
+      </p>
+    </div>
+    <div id="chatBox" class="h-64 overflow-y-auto border p-4 mb-4 bg-gray-50 rounded"></div>
+    <div class="mb-4">
+      <input id="questionInput" type="text" placeholder="Ask about cooking broccoli, carrots, or zucchini..." class="w-full p-2 border rounded">
+    </div>
+    <div class="flex justify-between">
+      <button onclick="askQuestion()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Ask</button>
+      <button onclick="clearChat()" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Clear</button>
+    </div>
+  </div>
+
+  <script>
+    // Static JSON data simulating pre-trained TensorFlow embeddings
+    const trainingData = [
+      {
+        question: "How do I steam broccoli?",
+        embedding: [0.1, 0.2, 0.3, 0.4, 0.5],
+        answer: "Place broccoli florets in a steamer basket over boiling water, cover, and steam for 5-7 minutes until tender but crisp. Season with salt and pepper.",
+        cookingTime: 7,
+        difficulty: "easy"
+      },
+      {
+        question: "What's the best way to roast carrots?",
+        embedding: [0.2, 0.3, 0.1, 0.5, 0.4],
+        answer: "Peel and cut carrots into sticks, toss with olive oil, salt, and pepper, and roast at 400°F (200°C) for 20-25 minutes, flipping halfway, until caramelized.",
+        cookingTime: 25,
+        difficulty: "medium"
+      },
+      {
+        question: "How can I sauté zucchini?",
+        embedding: [0.3, 0.1, 0.4, 0.2, 0.5],
+        answer: "Slice zucchini into rounds, heat olive oil in a pan over medium heat, add zucchini, and cook for 5-7 minutes, stirring occasionally, until golden and tender.",
+        cookingTime: 7,
+        difficulty: "easy"
+      },
+      {
+        question: "Can I boil carrots?",
+        embedding: [0.4, 0.2, 0.5, 0.3, 0.1],
+        answer: "Peel and chop carrots, place in boiling water, and cook for 5-10 minutes until tender. Drain and season with butter or herbs.",
+        cookingTime: 10,
+        difficulty: "easy"
+      }
+    ];
+
+    // Simple function to simulate embedding generation (in practice, use a pre-trained model)
+    function generateEmbedding(question) {
+      // Simulate embedding with random values for demo (in reality, use a model like Universal Sentence Encoder)
+      const embedding = Array(5).fill().map(() => Math.random() * 0.5);
+      return tf.tensor1d(embedding);
+    }
+
+    // Function to compute cosine similarity between two tensors
+    function cosineSimilarity(a, b) {
+      const dotProduct = tf.dot(a, b);
+      const normA = tf.norm(a);
+      const normB = tf.norm(b);
+      return dotProduct.div(normA.mul(normB)).dataSync()[0];
+    }
+
+    // Function to find the best matching answer and collect similarity scores
+    async function findBestAnswer(question) {
+      const questionEmbedding = generateEmbedding(question);
+      let bestMatch = null;
+      let highestSimilarity = -1;
+      const similarities = [];
+
+      for (const data of trainingData) {
+        const dataEmbedding = tf.tensor1d(data.embedding);
+        const similarity = cosineSimilarity(questionEmbedding, dataEmbedding);
+        similarities.push({
+          question: data.question,
+          similarity: similarity.toFixed(4),
+          embedding: data.embedding,
+          questionEmbedding: questionEmbedding.dataSync()
+        });
+        if (similarity > highestSimilarity) {
+          highestSimilarity = similarity;
+          bestMatch = data;
+        }
+      }
+
+      // Stricter threshold to ensure closer match
+      if (highestSimilarity > 0.5) {
+        return {
+          question: bestMatch.question,
+          answer: bestMatch.answer,
+          cookingTime: bestMatch.cookingTime,
+          difficulty: bestMatch.difficulty,
+          similarities,
+          questionEmbedding: questionEmbedding.dataSync()
+        };
+      }
+      return { similarities, questionEmbedding: questionEmbedding.dataSync() };
+    }
+
+    // Function to display message in chat box
+    function displayMessage(question, response) {
+      const chatBox = document.getElementById('chatBox');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'mb-2';
+      
+      // Prepare the math explanation
+      let mathExplanation = `
+        <strong class="text-gray-600">Math:</strong><br>
+        Cosine Similarity = (A · B) / (||A|| ||B||)<br>
+        Where A is the question embedding, B is the training question embedding.<br>
+        Question Embedding: [${response.questionEmbedding.map(x => x.toFixed(4)).join(', ')}]<br>
+      `;
+      response.similarities.forEach(sim => {
+        const dotProduct = response.questionEmbedding.reduce((sum, val, i) => sum + val * sim.embedding[i], 0);
+        const normA = Math.sqrt(response.questionEmbedding.reduce((sum, val) => sum + val * val, 0));
+        const normB = Math.sqrt(sim.embedding.reduce((sum, val) => sum + val * val, 0));
+        mathExplanation += `
+          - Compared to "${sim.question}":<br>
+            Training Embedding: [${sim.embedding.map(x => x.toFixed(4)).join(', ')}]<br>
+            Dot Product: ${dotProduct.toFixed(4)}<br>
+            Norm A: ${normA.toFixed(4)}, Norm B: ${normB.toFixed(4)}<br>
+            Similarity: ${sim.similarity} ${response.answer && sim.question === response.question ? '(Best Match)' : ''}<br>
+        `;
+      });
+
+      if (response.answer) {
+        messageDiv.innerHTML = `
+          <strong class="text-blue-600">Q:</strong> ${question}<br>
+          <strong class="text-green-600">A:</strong> ${response.answer}<br>
+          <strong class="text-purple-600">Time:</strong> ${response.cookingTime} min | 
+          <strong class="text-orange-600">Difficulty:</strong> ${response.difficulty}<br>
+          <hr/>
+          ${mathExplanation}
+        `;
+      } else {
+        messageDiv.innerHTML = `
+          <strong class="text-blue-600">Q:</strong> ${question}<br>
+          <strong class="text-red-600">A:</strong> I don't know. Try asking about cooking broccoli, carrots, or zucchini with a question like "How do I steam broccoli?"<br>
+          ${mathExplanation}
+        `;
+      }
+      chatBox.appendChild(messageDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    // Function to handle user question
+    async function askQuestion() {
+      const questionInput = document.getElementById('questionInput');
+      const question = questionInput.value.trim();
+      if (question) {
+        const response = await findBestAnswer(question);
+        displayMessage(question, response);
+        questionInput.value = '';
+      } else {
+        alert('Please enter a question.');
+      }
+    }
+
+    // Function to clear chat box
+    function clearChat() {
+      document.getElementById('chatBox').innerHTML = '';
+      document.getElementById('questionInput').value = '';
+    }
+  </script>
+</body>
+</html>
